@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Round TUIT. The app never writes who belongs where: only the bridge does (worker/src/index.js),
+// with a service account that bypasses these rules. The rules then trust those membership records.
+// Not live until published: paste into Firebase, Firestore, Rules, then Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function memberPath(cid) {
+      return /databases/$(database)/documents/circles/$(cid)/members/$(request.auth.uid);
+    }
+    function isMember(cid) { return signedIn() && exists(memberPath(cid)); }
+
+    function validTask(d) {
+      return d.id is string && d.id.size() <= 40
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 300
+        && d.list in ['a', 'b', 'either']
+        && d.addedBy in ['a', 'b']
+        && d.size is number
+        && (d.due == null || d.due is number)
+        && d.steps is list && d.steps.size() <= 50
+        && d.keys().size() <= 24;
+    }
+
+    // Which shared list a sign-in is on. Only its owner may read it; only the bridge writes it.
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /circles/{cid} {
+      allow read: if isMember(cid);
+      allow write: if false;
+
+      match /members/{uid} {
+        allow read: if isMember(cid);
+        allow write: if false;
+      }
+
+      match /tasks/{id} {
+        allow read, delete: if isMember(cid);
+        allow create, update: if isMember(cid) && request.resource.data.id == id && validTask(request.resource.data);
+      }
+
+      match /meta/{name} {
+        allow read: if isMember(cid);
+        allow write: if isMember(cid) && name == 'labels'
+          && request.resource.data.labels is list && request.resource.data.labels.size() <= 40
+          && request.resource.data.keys().size() == 1;
+      }
+    }
+
+    // Invite codes, try counters and anything else: the bridge only.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -26,6 +26,9 @@ Two people in one home, each on their own iPhone: one iPhone Duo (the foldable) 
 | 24 Nov 2026 | Colours are a setting, given to jobs by hand to begin with. |
 | 24 Nov 2026 | A job's size may be guessed by AI. Until that is wired up, a simple word list makes the guess and one slide corrects it. |
 | 24 Nov 2026 | All twelve UX ideas accepted (see below), with the chips replaced. |
+| 24 Nov 2026 | Sharing follows Daybook: email and password sign-in, one shared list for two people, joined by a one-use code. Its own Firebase project, not Daybook's. |
+| 24 Nov 2026 | A reminder sounds on the phone of the person the job is for; "Either of us" jobs sound on both. |
+| 24 Nov 2026 | TestFlight is available (Daybook uses it), so stage 5 will reuse Daybook's workflow with a new bundle id. |
 
 ## How the order works
 Every job has a size (5 minutes up to a big job) and may have a date.
@@ -38,7 +41,7 @@ A big job with steps counts as a short job while it has a next step, so it does 
 | Stage | What | State |
 | --- | --- | --- |
 | 1 | The app on one phone: lists, capture by sentence and speech, ordering, colours, steps, repeats, "I have 10 minutes", the in-app buzzer, the Duo layout | Built, this version |
-| 2 | Sharing between the two phones and sign-in, reusing what Daybook uses | Waiting on Daybook's notes |
+| 2 | Sharing between the two phones and sign-in, in Daybook's pattern: Firebase sign-in and Firestore, with a Cloudflare Worker bridge that alone writes who belongs | Built and tested on the emulator. Needs `docs/SETUP-SHARING.md` done before it is live |
 | 3 | Reminders when the app is closed: web push with the repeat run from the server | Needs stage 2 |
 | 4 | AI size guesses; add from Siri or the Action Button; morning summary | Needs stage 2 |
 | 5 | Capacitor wrap and TestFlight, for a buzzer that can sound through silent mode | After stage 3 is judged on the real phones |
@@ -52,6 +55,5 @@ A big job with steps counts as a short job while it has a next step, so it does 
 - The repository is public: no real names, no personal details, no keys.
 
 ## Still to decide
-- Where the shared data lives and how the two phones sign in (stage 2).
 - Whether the web buzzer is strong enough, or the TestFlight build is needed (stage 5).
 - Measured screen sizes from the real Duo, folded and unfolded, from `device.html`.

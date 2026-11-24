@@ -36,8 +36,11 @@ const state = store.load();
 const view = { list: store.me(), fit: 0 };
 const sheet = $('#sheet'), buzzer = $('#buzzer'), toastBox = $('#toast');
 
-// Tidy away jobs done more than 30 days ago.
-state.tasks = state.tasks.filter((t) => !t.doneAt || Date.now() - t.doneAt < 30 * DAY);
+
+// Sharing between phones is switched on by filling in config.js. Until then everything stays on this phone.
+const CONFIG = window.ROUND_TUIT_CONFIG || {};
+const canShare = !!(CONFIG.firebase && CONFIG.firebase.apiKey && CONFIG.bridge);
+let sync = null, shareFailed = false;
 
 /* ---------- small messages ---------- */
 let toastTimer = null;
@@ -152,7 +155,7 @@ function render() {
   $('#addbar').hidden = !state.profile.setup;
   $('#micBtn').hidden = !canSpeak;
   renderTabs();
-  if (!state.profile.setup) { main.replaceChildren(welcome()); return; }
+  if (!state.profile.setup) { if (!main.querySelector('.welcome')) main.replaceChildren(welcome()); return; } // never redraw over names being typed
 
   const mine = state.tasks.filter((t) => t.list === view.list);
   let rows = arrange(mine, now);
@@ -440,10 +443,92 @@ function openFit() {
   show();
 }
 
+// The Sharing part of Settings. It redraws itself as sign-in and the shared list change.
+let joinCode = new URLSearchParams(location.search).get('join') || '';
+function sharingBox() {
+  const box = el('div', { class: 'sharebox' });
+  let last = '', code = '', stop = null;
+  const run = (fn) => async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try { await fn(); } catch (err) { toast(err.message || 'That did not work. Try again in a moment.'); }
+    btn.disabled = false;
+  };
+  const myName = () => state.profile.names[store.me()] || 'Me';
+  const draw = () => {
+    const st = sync ? sync.status() : null;
+    const mode = !canShare ? 'off' : shareFailed ? 'failed' : !st || !st.ready ? 'wait' : !st.user ? 'out' : !st.circle ? 'alone' : st.members.length < 2 ? 'invite' : 'both';
+    const key = mode + '|' + (st ? st.problem : '') + '|' + code + '|' + (st && st.user ? st.user.email : '') + '|' + (st ? st.members.map((m) => m.name).join() : '');
+    if (key === last) return;
+    last = key;
+    const out = [];
+    if (st && st.problem) out.push(el('p', { class: 'hint danger', text: st.problem }));
+    if (mode === 'off') out.push(el('p', { class: 'hint', text: 'Your jobs are kept on this phone. Sharing between your two phones is not switched on yet.' }));
+    else if (mode === 'failed') out.push(el('p', { class: 'hint', text: 'Sharing could not start. Check the signal, then close and open Round TUIT.' }));
+    else if (mode === 'wait') out.push(el('p', { class: 'hint', text: 'Checking the shared list.' }));
+    else if (mode === 'out') {
+      const email = el('input', { type: 'email', id: 'shEmail', autocomplete: 'email', autocapitalize: 'none', spellcheck: 'false', inputmode: 'email' });
+      const pass = el('input', { type: 'password', id: 'shPass', autocomplete: 'current-password' });
+      const need = () => {
+        if (!email.value.trim()) { email.focus(); throw new Error('Add your email address.'); }
+        if (pass.value.length < 8) { pass.focus(); throw new Error('Use a password of 8 characters or more.'); }
+      };
+      out.push(
+        el('p', { class: 'hint', text: 'To see each other\'s jobs, each of you signs in on your own phone with your own email.' }),
+        el('label', { class: 'lab', for: 'shEmail', text: 'Email' }), email,
+        el('label', { class: 'lab', for: 'shPass', text: 'Password' }), pass,
+        el('button', { type: 'button', class: 'primary', text: 'Sign in', onclick: run(async () => { need(); await sync.signIn(email.value, pass.value); }) }),
+        el('button', { type: 'button', class: 'second', text: 'Create an account', onclick: run(async () => { need(); await sync.signUp(email.value, pass.value); }) }),
+        el('button', { type: 'button', class: 'linkbtn', text: 'Forgotten your password?', onclick: run(async () => {
+          if (!email.value.trim()) { email.focus(); throw new Error('Add your email address first.'); }
+          await sync.resetPassword(email.value); toast('If that email has an account, a reset link is on its way.');
+        }) }));
+    } else if (mode === 'alone') {
+      const codeIn = el('input', { type: 'text', id: 'shCode', value: joinCode, maxlength: '12', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false', placeholder: '8 letters and numbers' });
+      out.push(
+        el('p', { class: 'hint', text: 'Signed in as ' + st.user.email + '.' }),
+        el('button', { type: 'button', class: 'primary', text: 'Start a shared list from this phone', onclick: run(async () => { await sync.startSharing(myName()); }) }),
+        el('p', { class: 'hint', text: 'Or, if the other phone has already started one, type its code here.' }),
+        el('label', { class: 'lab', for: 'shCode', text: 'Code from the other phone' }), codeIn,
+        el('button', { type: 'button', class: 'second', text: 'Join with this code', onclick: run(async () => {
+          if (!codeIn.value.trim()) { codeIn.focus(); throw new Error('Type the code from the other phone.'); }
+          await sync.join(codeIn.value, myName()); joinCode = '';
+        }) }),
+        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(() => sync.signOutNow()) }));
+    } else if (mode === 'invite') {
+      out.push(el('p', { class: 'hint', text: 'Sharing is on for this phone. Now add the other phone.' }));
+      if (code) {
+        const words = 'Join my Round TUIT list. In Round TUIT open Settings, then Sharing, sign in, and type this code: ' + code;
+        out.push(
+          el('p', { class: 'code', text: code, 'aria-label': 'Code: ' + code.split('').join(' ') }),
+          el('p', { class: 'hint', text: 'On the other phone: Settings, Sharing, create an account, then type this code. It works once, and for 7 days.' }),
+          navigator.share ? el('button', { type: 'button', class: 'second', text: 'Send the code', onclick: run(async () => { try { await navigator.share({ text: words }); } catch (e) { /* closed without sending */ } }) }) : null);
+      }
+      out.push(
+        el('button', { type: 'button', class: code ? 'second' : 'primary', text: code ? 'Make a new code' : 'Make a code for the other phone', onclick: run(async () => { code = (await sync.invite()).code; draw(); }) }),
+        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(() => sync.signOutNow()) }));
+    } else {
+      const them = st.members.find((m) => m.seat !== st.seat);
+      out.push(
+        el('p', { class: 'hint' }, 'Sharing with ', el('b', { text: them ? them.name : 'the other phone' }), '. A change on one phone shows on the other.'),
+        el('p', { class: 'hint', text: 'Signed in as ' + st.user.email + '.' }),
+        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(() => sync.signOutNow()) }));
+    }
+    box.replaceChildren(...out.filter(Boolean));
+  };
+  if (sync) stop = sync.onStatus(draw);
+  return { box, draw, stop: () => { if (stop) stop(); } };
+}
+
 function openSettings() {
   const names = state.profile.names;
-  const meIn = el('input', { type: 'text', id: 'sMe', value: names[store.me()], maxlength: '24', autocapitalize: 'words', oninput: (e) => { names[store.me()] = e.target.value.trim(); store.save(); } });
-  const themIn = el('input', { type: 'text', id: 'sThem', value: names[store.other()], maxlength: '24', autocapitalize: 'words', oninput: (e) => { names[store.other()] = e.target.value.trim(); store.save(); } });
+  const shared = () => !!(sync && sync.status().circle);
+  const meIn = el('input', { type: 'text', id: 'sMe', value: names[store.me()], maxlength: '24', autocapitalize: 'words',
+    oninput: (e) => { names[store.me()] = e.target.value.trim(); store.save(); },
+    onchange: (e) => { const v = e.target.value.trim(); if (v && shared()) sync.rename(v).catch((err) => toast(err.message)); } });
+  // Once the other phone has joined, its owner chooses the name shown here.
+  const themJoined = shared() && sync.status().members.length > 1;
+  const themIn = el('input', { type: 'text', id: 'sThem', value: names[store.other()], maxlength: '24', autocapitalize: 'words', disabled: themJoined, oninput: (e) => { names[store.other()] = e.target.value.trim(); store.save(); } });
+  const share = sharingBox();
 
   const colourBox = el('div', { class: 'rows' });
   const drawColours = () => {
@@ -483,6 +568,9 @@ function openSettings() {
 
   const s = state.settings;
   const body = [
+    el('h3', { class: 'sechead', text: 'Sharing' }),
+    share.box,
+
     el('h3', { class: 'sechead', text: 'Who is who' }),
     el('div', { class: 'rows' },
       el('label', { class: 'row', for: 'sMe' }, el('span', { text: 'You' }), meIn),
@@ -504,12 +592,11 @@ function openSettings() {
     el('button', { type: 'button', class: 'second', text: 'Try the buzzer', onclick: () => { sheet.close(); openBuzzer(null); } }),
 
     el('h3', { class: 'sechead', text: 'About' }),
-    el('p', { class: 'about', text: 'Your jobs are kept on this phone for now. Sharing between your two phones comes next.' }),
     el('a', { class: 'second linkrow', href: 'device.html', text: 'Screen check' }),
-    el('p', { class: 'about', text: 'Round TUIT, version 0.1. Made by Mark 1 Apps Ltd.' }),
+    el('p', { class: 'about', text: 'Round TUIT, version 0.2. Made by Mark 1 Apps Ltd.' }),
   ];
-  openSheet('Settings', body);
-  drawColours(); drawNote();
+  openSheet('Settings', body, share.stop);
+  drawColours(); drawNote(); share.draw();
 }
 
 /* ---------- the buzzer ---------- */
@@ -546,6 +633,20 @@ render();
 store.save();
 
 startReminders({ toast, openBuzzer, buzzerOpenFor: () => buzzingId });
+
+if (canShare) {
+  let wasMe = store.me();
+  import('./sync.js').then((m) => {
+    sync = m;
+    m.onStatus(() => {
+      // A phone that joins takes the second place, so "Mine" moves with it.
+      if (store.me() !== wasMe) { if (view.list !== 'either') view.list = view.list === wasMe ? store.me() : store.other(); wasMe = store.me(); }
+      if (!sheet.open) render(); else renderTabs();
+    });
+    return m.start();
+  }).catch(() => { shareFailed = true; });
+  if (joinCode && state.profile.setup) setTimeout(openSettings, 600);
+}
 setInterval(() => { if (!sheet.open && !buzzer.open && !document.hidden) render(); }, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !sheet.open) render(); });
 

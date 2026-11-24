@@ -156,7 +156,7 @@ dialog { color: var(--ink); }
 
 label.lab, .lab { display: block; font-weight: 600; }
 .hint { color: var(--slate); font-size: 1rem; }
-textarea, input[type="text"], input[type="time"], input[type="datetime-local"] {
+textarea, input[type="text"], input[type="email"], input[type="password"], input[type="time"], input[type="datetime-local"] {
   display: block; width: 100%; min-height: 52px; padding: 13px 14px; border: 1.5px solid var(--line-strong); border-radius: 14px; background: var(--surface); font-size: 1.0625rem; line-height: 1.4;
 }
 textarea { resize: none; min-height: 84px; font: 600 1.25rem/1.3 var(--serif); }
@@ -204,6 +204,11 @@ details.more > .inner > * + * { margin-top: 16px; }
 .colourrow > * { min-width: 0; }
 .colourrow input[type="text"] { flex: 1 1 8em; min-height: 44px; padding: 8px 10px; }
 .colourrow select { flex: 0 1 7em; min-height: 44px; padding: 0 22px 0 8px; border: 1.5px solid var(--line-strong); border-radius: 12px; background-color: var(--surface); font-size: 1rem; }
+.sharebox > * + * { margin-top: 12px; }
+.sharebox .code { padding: 14px 10px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); font: 600 2rem/1.2 var(--serif); letter-spacing: .14em; text-align: center; color: var(--plum); overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
+input:disabled { opacity: 1; color: var(--slate); border-color: transparent; background: transparent; -webkit-text-fill-color: var(--slate); }
+button:disabled { opacity: .55; }
+.sechead:first-child { margin-top: 4px !important; }
 .sechead { margin-top: 26px !important; font: 600 1.1875rem/1.2 var(--serif); }
 .about { color: var(--slate); font-size: 1rem; }
 a.linkrow { display: grid; place-items: center; color: var(--ink); text-decoration: none; text-align: center; }

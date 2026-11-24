@@ -88,7 +88,9 @@ export function startReminders(ui) {
   const lastBuzzNote = new Map();
   const tick = () => {
     const state = store.get(), now = Date.now();
-    const { notify, buzz } = dueAlerts(state.tasks, now, state.settings);
+    // A reminder sounds on the phone of whoever the job is for.
+    const mine = state.tasks.filter((t) => t.list === store.me() || t.list === 'either');
+    const { notify, buzz } = dueAlerts(mine, now, state.settings);
     let changed = false;
     for (const t of notify) {
       t.alertedAt = now; changed = true;

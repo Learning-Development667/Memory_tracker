@@ -7,4 +7,5 @@ A shared jobs list for two people, built as a vanilla HTML, CSS and JS Home Scre
 - Words: UK English, no em dashes, short plain sentences. Body text never under 17 px. Tap targets 48 px. Nothing relies on colour alone.
 - No chips or pill buttons for choosing values. Use the sliders and plain rows already in the app.
 - No real names or personal details in the code or tests: this repository is public.
-- Tests: `npm test` (ordering and sentence reading), `node tests/sweep.mjs` (every width from the Duo guide).
+- Sharing, sign-in, the bridge and builds follow Daybook's pattern: read `docs/daybook/` and `docs/SETUP-SHARING.md`. Never put a key, password or service account in the repository or a chat.
+- Tests: `npm test` (ordering, sentence reading, sign-in token checks), `node tests/sweep.mjs` (every width from the Duo guide), and for anything touching sharing or `firestore.rules`: `npx firebase-tools emulators:exec --only auth,firestore --project demo-round-tuit "node tests/sharing.mjs"`.

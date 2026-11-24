@@ -1,0 +1,11 @@
+# Round TUIT bridge. Secrets are never kept here: they are set by the deploy workflow from GitHub secrets.
+#   FIREBASE_SERVICE_ACCOUNT   the Firebase service account's JSON key
+name = "round-tuit-bridge"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+# The Firebase project id (public). Fill in when the project exists: see docs/SETUP-SHARING.md.
+FIREBASE_PROJECT_ID = ""
+# The only places the bridge answers: the web address, and the iPhone app (capacitor://localhost).
+ALLOWED_ORIGINS = "https://learning-development667.github.io,capacitor://localhost"
