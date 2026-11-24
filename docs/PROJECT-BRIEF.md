@@ -6,7 +6,7 @@ Version 1, 24 November 2026. Owner: Mark. Maker: Mark 1 Apps Ltd.
 A jobs list for two people that puts itself in a sensible order, so the quick jobs get done and the dated jobs are not forgotten. The name is the old joke: you will do it when you get a round tuit.
 
 ## Who uses it
-Two people in one home, each on their own iPhone: one iPhone Duo (the foldable) and one iPhone 16 Plus. Mobile only.
+Two people in one home, each on their own iPhone: one iPhone Duo (the foldable) and one iPhone 16 Pro. Mobile only.
 
 ## What it must do
 1. Each person has their own list. Either can add to the other's. A third list, "Either of us", holds jobs for whoever gets there first.
