@@ -1,0 +1,9 @@
+{
+  "name": "round-tuit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "sweep": "node tests/sweep.mjs"
+  }
+}

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Round TUIT screen check</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .probe { position: fixed; visibility: hidden; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+  .big { font: 600 2.5rem/1.1 var(--serif); color: var(--plum); overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 12px 16px; text-align: left; vertical-align: top; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  tr:first-child th, tr:first-child td { border-top: 0; }
+  th { font-weight: 600; width: 46%; }
+  .wrap > * + * { margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="probe" id="probe"></div>
+<main class="main wrap" style="padding-top: calc(20px + var(--safe-t)); padding-bottom: calc(32px + var(--safe-b));">
+  <p class="eyebrow">Round TUIT screen check</p>
+  <p class="big" id="size" aria-live="polite"></p>
+  <p class="hint">Take a screenshot of this page, folded and unfolded, and again with the phone's Text Size turned up. The numbers change as you fold, turn or resize.</p>
+  <div class="rows"><table id="facts"></table></div>
+  <button type="button" class="primary" id="copy">Copy these numbers</button>
+  <a class="second linkrow" href="./">Back to Round TUIT</a>
+</main>
+<script type="module">
+import { applyTextSize } from './js/textsize.js';
+const $ = (id) => document.getElementById(id);
+function facts() {
+  const cs = getComputedStyle($('probe'));
+  const ts = applyTextSize();
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  return [
+    ['Page', innerWidth + ' x ' + innerHeight],
+    ['Pixel ratio', String(devicePixelRatio)],
+    ['Screen', screen.width + ' x ' + screen.height],
+    ['Turned', innerWidth > innerHeight ? 'Sideways' : 'Upright'],
+    ['Safe areas', 'top ' + cs.paddingTop + ', right ' + cs.paddingRight + ', bottom ' + cs.paddingBottom + ', left ' + cs.paddingLeft],
+    ['Text size', Math.round(ts * 100) + '%'],
+    ['Opened from', standalone ? 'Home Screen' : 'Browser'],
+    ['Tap to speak', (window.SpeechRecognition || window.webkitSpeechRecognition) ? 'Available' : 'Not available here'],
+    ['Notifications', 'Notification' in window ? Notification.permission : 'Not available here'],
+    ['Dark mode', matchMedia('(prefers-color-scheme: dark)').matches ? 'On' : 'Off'],
+    ['Browser', navigator.userAgent],
+  ];
+}
+function draw() {
+  const rows = facts();
+  $('size').textContent = rows[0][1];
+  $('facts').replaceChildren(...rows.map(([k, v]) => {
+    const tr = document.createElement('tr'), th = document.createElement('th'), td = document.createElement('td');
+    th.scope = 'row'; th.textContent = k; td.textContent = v; tr.append(th, td); return tr;
+  }));
+}
+addEventListener('resize', draw);
+document.addEventListener('visibilitychange', draw);
+$('copy').addEventListener('click', async () => {
+  const text = facts().map(([k, v]) => k + ': ' + v).join('\n');
+  try { await navigator.clipboard.writeText(text); $('copy').textContent = 'Copied'; }
+  catch (e) { $('copy').textContent = 'Could not copy. Take a screenshot instead.'; }
+  setTimeout(() => { $('copy').textContent = 'Copy these numbers'; }, 2500);
+});
+draw();
+</script>
+</body>
+</html>

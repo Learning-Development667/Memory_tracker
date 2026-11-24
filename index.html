@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Round TUIT</title>
+<meta name="description" content="A jobs list for two that puts itself in order.">
+<meta name="theme-color" content="#F7F1EA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1A1420" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Round TUIT">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preload" href="fonts/fraunces-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="bar-in">
+    <h1 class="wordmark"><span class="ring" aria-hidden="true"></span><span class="vh">Round </span><span>TUIT</span></h1>
+    <button type="button" id="settingsBtn" class="iconbtn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg>
+    </button>
+  </div>
+  <nav class="lists bar-in" id="lists" aria-label="Lists"></nav>
+</header>
+
+<main class="main" id="main"></main>
+
+<div class="addbar" id="addbar">
+  <div class="bar-in">
+    <button type="button" id="addBtn" class="primary">Add a job</button>
+    <button type="button" id="micBtn" class="micbtn" aria-label="Speak a job">
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+  </div>
+</div>
+
+<dialog class="sheet" id="sheet"></dialog>
+<dialog class="buzzer" id="buzzer" aria-labelledby="bzTitle"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<noscript><p style="padding:24px">Round TUIT needs JavaScript switched on.</p></noscript>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
