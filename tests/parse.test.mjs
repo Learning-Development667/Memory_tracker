@@ -81,6 +81,14 @@ test('polite openers are dropped', () => {
   assert.equal(p('remind me to ring the plumber').title, 'Ring the plumber');
 });
 
+test('making or fitting something sizeable is a big job', () => {
+  for (const t of ['Build a cupboard', 'Finish building the dining room cupboard', 'Make a cupboard for the dining room', 'Put the wardrobe together', 'Fit the new kitchen', 'Build the shed', 'Put up a fence', 'Lay the patio']) assert.equal(guessSize(t), 480, t);
+  assert.equal(guessSize('Paint the hall'), 240);
+  assert.equal(guessSize('Make the bed'), 15, 'making the bed is quick');
+  assert.equal(guessSize('Clean the bathroom'), 30, 'cleaning is not building');
+  assert.equal(guessSize('Shut the shed door'), 15);
+});
+
 test('size guesses put the cupboard after the snug', () => {
   assert.ok(guessSize('Finish building the dining room cupboard') > guessSize('Tidy the snug'));
   assert.equal(guessSize('Ring the plumber'), 5);

@@ -36,8 +36,12 @@ const SIZE_WORDS = [
   [15, /\b(tidy\w*|wipe\w*|empty\w*|load\w*|unload\w*|sweep\w*|fold\w*|make the bed\w*|wash up|washing up|hang (out|up)|dust\w*|pick up|collect\w*|drop off)\b/],
   [5, /\b(ring|call|phone|text|email|message|reply|pay|book|order|bins?|post|take out|put out|water|feed|put away|check|cancel|renew|remind|ask|tell|charge|lock|find|take (my|the|your) (tablets?|pills?|meds|medicine))\b/],
 ];
+// Making or fitting something sizeable is a big job, whatever the verb.
+const MAKING = /\b(build\w*|mak(e|es|ing)|fit(s|ting)?|install\w*|assembl\w*|construct\w*|put( [a-z ]{1,30})? together|put up|lay(ing)?|knock up|replace\w*|renew(ing)? the|redo\w*|re-?do\w*)\b/;
+const SIZEABLE = /\b(cupboards?|wardrobes?|units?|shelving|bookcases?|dressers?|sideboards?|bunk ?beds?|desks?|bed ?frames?|headboards?|kitchen|bathroom|shower|bath|sheds?|fences?|fencing|decking|deck|patio|pergola|greenhouse|summer ?house|raised beds?|extension|conservatory|porch|garage|loft|floor(ing)?|doors|windows|staircase|stairs|worktops?)\b/;
 export function guessSize(title) {
   const s = ' ' + String(title || '').toLowerCase() + ' ';
+  if (MAKING.test(s) && SIZEABLE.test(s)) return 480;
   for (const [min, re] of SIZE_WORDS) if (re.test(s)) return min;
   return 15;
 }
