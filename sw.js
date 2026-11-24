@@ -1,7 +1,7 @@
 // Round TUIT service worker: the app opens with no signal, and a tapped reminder opens its job.
-const CACHE = 'round-tuit-v2';
+const CACHE = 'round-tuit-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'device.html',
-  'config.js', 'js/app.js', 'js/sync.js', 'vendor/firebase/firebase-app.js', 'vendor/firebase/firebase-auth.js', 'vendor/firebase/firebase-firestore.js', 'js/order.js', 'js/parse.js', 'js/store.js', 'js/speech.js', 'js/alarm.js', 'js/textsize.js',
+  'config.js', 'js/app.js', 'js/sync.js', 'js/push.js', 'vendor/firebase/firebase-app.js', 'vendor/firebase/firebase-auth.js', 'vendor/firebase/firebase-firestore.js', 'js/order.js', 'js/parse.js', 'js/store.js', 'js/speech.js', 'js/alarm.js', 'js/textsize.js',
   'fonts/fraunces-latin-wght-normal.woff2', 'fonts/inter-latin-wght-normal.woff2',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-180.png'];
 
@@ -24,12 +24,22 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
+// A reminder from the bridge, sent while the app may be closed. Every push must show a notification.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) { d = {}; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Round TUIT', {
+    body: d.body || 'A job is due.', tag: d.id || 'round-tuit', renotify: true,
+    icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', data: { id: d.id || '' },
+  }));
+});
+
 self.addEventListener('notificationclick', (e) => {
   const id = e.notification.data && e.notification.data.id;
   e.notification.close();
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     const page = list[0];
-    if (page) { page.postMessage({ open: id }); return page.focus(); }
-    return self.clients.openWindow('./');
+    if (page) { if (id) page.postMessage({ open: id }); return page.focus(); }
+    return self.clients.openWindow(id ? './?open=' + encodeURIComponent(id) : './');
   }));
 });

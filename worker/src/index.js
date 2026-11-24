@@ -5,6 +5,8 @@
 // Secret: FIREBASE_SERVICE_ACCOUNT (the service account's JSON key). Never printed or logged.
 // Vars (wrangler.toml): FIREBASE_PROJECT_ID, ALLOWED_ORIGINS.
 
+import { cleanSubscription, vapidKeys, sendPush } from './push.js';
+
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0, O, 1, I or L: easy to read out and type
@@ -145,10 +147,31 @@ function store(dbi) {
       const d = await r.json();
       return { data: decFields(d.fields), updateTime: d.updateTime };
     },
-    async list(path) {
-      const r = await call('GET', dbi.root + '/' + path + '?pageSize=20');
+    async list(path, max) {
+      const out = [];
+      let page = '';
+      do {
+        const r = await call('GET', dbi.root + '/' + path + '?pageSize=100' + (page ? '&pageToken=' + encodeURIComponent(page) : ''));
+        if (!r.ok) throw new Refused(503, 'Try again in a moment.');
+        const d = await r.json();
+        for (const doc of d.documents || []) out.push({ id: doc.name.split('/').pop(), data: decFields(doc.fields) });
+        page = d.nextPageToken || '';
+      } while (page && out.length < (max || 100));
+      return out;
+    },
+    // Documents in parent/collection whose field is a number no more than most.
+    async atMost(parent, collection, field, most) {
+      const r = await call('POST', dbi.root + '/' + parent + ':runQuery', { structuredQuery: {
+        from: [{ collectionId: collection }],
+        where: { fieldFilter: { field: { fieldPath: field }, op: 'LESS_THAN_OR_EQUAL', value: enc(most) } },
+        limit: 200,
+      } });
       if (!r.ok) throw new Refused(503, 'Try again in a moment.');
-      return ((await r.json()).documents || []).map((d) => ({ id: d.name.split('/').pop(), data: decFields(d.fields) }));
+      return (await r.json()).filter((x) => x.document).map((x) => decFields(x.document.fields));
+    },
+    async remove(path) {
+      const r = await call('POST', dbi.root + ':commit', { writes: [{ delete: dbi.name + '/' + path }] });
+      if (!r.ok) throw new Refused(503, 'Try again in a moment.');
     },
     // writes: [{ path, data, mustBeNew, ifUpdatedAt }] all or nothing. False if a condition failed.
     async commit(writes) {
@@ -240,6 +263,34 @@ const routes = {
   },
 
   // Change the name the other phone sees.
+  // The bridge's public push key, which the phone needs to subscribe.
+  async '/push-key'(fs, who) {
+    if (!(await whereIs(fs, who.uid))) throw new Refused(403, 'Start sharing on this phone first.');
+    return { key: (await vapidKeys(fs)).publicKey };
+  },
+
+  // This phone's push subscription, quiet hours and time zone. One phone per sign-in.
+  async '/push'(fs, who, body, deps) {
+    const have = await whereIs(fs, who.uid);
+    if (!have) throw new Refused(403, 'Start sharing on this phone first.');
+    const sub = cleanSubscription(body.subscription, deps.pushHostOk);
+    if (!sub) throw new Refused(400, 'This phone gave a push address the bridge does not send to.');
+    const q = body.quiet || {}, time = (v, d) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v)) ? String(v) : d);
+    const tz = String(body.tz || '').slice(0, 64);
+    let zone = 'Europe/London';
+    try { if (tz) { new Intl.DateTimeFormat('en-GB', { timeZone: tz }); zone = tz; } } catch (e) { /* unknown zone: keep London */ }
+    await fs.commit([{ path: 'circles/' + have.circle + '/push/' + who.uid, data: {
+      sub, quietOn: q.on !== false, quietFrom: time(q.from, '22:00'), quietTo: time(q.to, '07:00'), tz: zone, at: Date.now(),
+    } }]);
+    return { on: true };
+  },
+
+  async '/push-off'(fs, who) {
+    const have = await whereIs(fs, who.uid);
+    if (have) await fs.remove('circles/' + have.circle + '/push/' + who.uid);
+    return { on: false };
+  },
+
   async '/name'(fs, who, body) {
     const name = cleanName(body.name);
     const have = await whereIs(fs, who.uid);
@@ -276,7 +327,7 @@ export function makeBridge(deps) {
       let body = {};
       try { body = text ? JSON.parse(text) : {}; } catch (e) { throw new Refused(400, 'That could not be read.'); }
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Refused(400, 'That could not be read.');
-      return reply(200, await route(store(deps.database(env)), who, body));
+      return reply(200, await route(store(deps.database(env)), who, body, deps, env));
     } catch (e) {
       if (e instanceof Refused) return reply(e.status, { message: e.message });
       return reply(500, { message: 'Something went wrong. Try again in a moment.' }); // the cause is never sent back
@@ -284,4 +335,93 @@ export function makeBridge(deps) {
   };
 }
 
-export default { fetch: makeBridge({ verify: verifyFirebaseToken, database: realDatabase, needsSecret: true }) };
+/* ---------- reminders when the app is closed: runs every minute ---------- */
+const MIN = 60000;
+const BUZZ_EVERY = 2 * MIN, NUDGE_EVERY = 15 * MIN, SLACK = 5000; // slack: the minute timer is not exact
+
+function localMinutes(now, tz) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now));
+    const get = (t) => Number(parts.find((p) => p.type === t).value);
+    return get('hour') * 60 + get('minute');
+  } catch (e) { const d = new Date(now); return d.getUTCHours() * 60 + d.getUTCMinutes(); }
+}
+function inQuiet(now, prefs) {
+  if (!prefs.quietOn) return false;
+  const m = localMinutes(now, prefs.tz);
+  const [fh, fm] = prefs.quietFrom.split(':').map(Number), [th, tm] = prefs.quietTo.split(':').map(Number);
+  const from = fh * 60 + fm, to = th * 60 + tm;
+  return from <= to ? m >= from && m < to : m >= from || m < to;
+}
+
+// The same rules as the app's own reminders (js/alarm.js): Quiet once, Nudge every 15 minutes,
+// Buzzer every 2 minutes until ticked, Silence pauses a Buzzer, quiet hours hold back the rest.
+export function whatToSend(t, rec, now, prefs) {
+  const quiet = inQuiet(now, prefs);
+  if (t.remind === 'buzzer') {
+    if (now < (t.silencedUntil || 0)) return null;
+    if (quiet && !t.hasTime) return null;
+    return !rec || now - rec.last >= BUZZ_EVERY - SLACK ? 'buzzer' : null;
+  }
+  if (!rec) return t.remind === 'nudge' ? 'nudge' : 'quiet';
+  if (t.remind === 'nudge' && !quiet && now - rec.last >= NUDGE_EVERY - SLACK) return 'nudge';
+  return null;
+}
+const WORDS = {
+  quiet: 'Time to do this.',
+  nudge: 'Still to do.',
+  buzzer: 'Still to do. Open Round TUIT to tick it off or silence it.',
+};
+
+async function remindCircle(fs, cid, now, vapid, deps, env) {
+  const due = (await fs.atMost('circles/' + cid, 'tasks', 'alarmAt', now)).filter((t) => !t.doneAt && t.id && t.title);
+  const sentPath = 'circles/' + cid + '/bridge/sent';
+  const before = await fs.get(sentPath);
+  const sent = before ? before.data : {};
+  if (!due.length) {
+    if (Object.keys(sent).length) await fs.commit([{ path: sentPath, data: {} }]);
+    return 0;
+  }
+  const subs = await fs.list('circles/' + cid + '/push');
+  const seats = Object.fromEntries((await fs.list('circles/' + cid + '/members')).map((m) => [m.id, m.data.seat]));
+  const next = {};
+  let count = 0;
+  for (const t of due) {
+    for (const s of subs) {
+      const seat = seats[s.id];
+      if (!seat || !(t.list === seat || t.list === 'either')) continue;
+      const key = t.id + '__' + s.id;
+      const rec = sent[key] && sent[key].alarm === t.alarmAt ? sent[key] : null;
+      if (rec) next[key] = rec;
+      const kind = whatToSend(t, rec, now, s.data);
+      if (!kind) continue;
+      const result = await sendPush(s.data.sub, { title: t.title, body: WORDS[kind], id: t.id, kind }, vapid,
+        { hostOk: deps.pushHostOk, subject: env.VAPID_SUBJECT || 'https://learning-development667.github.io/Memory_tracker/', now, ttl: kind === 'buzzer' ? 300 : 3600 });
+      if (result === 'sent') { next[key] = { alarm: t.alarmAt, last: now }; count++; }
+      else if (result === 'gone') await fs.remove('circles/' + cid + '/push/' + s.id);
+    }
+  }
+  if (JSON.stringify(next) !== JSON.stringify(sent)) await fs.commit([{ path: sentPath, data: next }]);
+  return count;
+}
+
+// deps: { database(env), now(), pushHostOk(url) }. Returns how many messages went.
+export function makeScheduler(deps) {
+  return async function run(env) {
+    if (!env.FIREBASE_PROJECT_ID || (deps.needsSecret && !env.FIREBASE_SERVICE_ACCOUNT)) return 0;
+    const fs = store(deps.database(env)), now = deps.now ? deps.now() : Date.now();
+    const vapid = await vapidKeys(fs);
+    let count = 0;
+    for (const c of await fs.list('circles', 2000)) {
+      try { count += await remindCircle(fs, c.id, now, vapid, deps, env); } catch (e) { /* one list failing does not stop the rest */ }
+    }
+    return count;
+  };
+}
+
+const LIVE = { verify: verifyFirebaseToken, database: realDatabase, needsSecret: true };
+const remind = makeScheduler(LIVE);
+export default {
+  fetch: makeBridge(LIVE),
+  scheduled(controller, env, ctx) { ctx.waitUntil(remind(env)); },
+};

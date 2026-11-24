@@ -8,4 +8,4 @@ A shared jobs list for two people, built as a vanilla HTML, CSS and JS Home Scre
 - No chips or pill buttons for choosing values. Use the sliders and plain rows already in the app.
 - No real names or personal details in the code or tests: this repository is public.
 - Sharing, sign-in, the bridge and builds follow Daybook's pattern: read `docs/daybook/` and `docs/SETUP-SHARING.md`. Never put a key, password or service account in the repository or a chat.
-- Tests: `npm test` (ordering, sentence reading, sign-in token checks), `node tests/sweep.mjs` (every width from the Duo guide), and for anything touching sharing or `firestore.rules`: `npx firebase-tools emulators:exec --only auth,firestore --project demo-round-tuit "node tests/sharing.mjs"`.
+- Tests: `npm test` (ordering, sentence reading, sign-in token checks, push encryption and timing), `node tests/sweep.mjs` (every width from the Duo guide), and for anything touching sharing, reminders, the bridge or `firestore.rules`: `npx firebase-tools emulators:exec --only auth,firestore --project demo-round-tuit "node tests/sharing.mjs"`.

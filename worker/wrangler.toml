@@ -1,5 +1,6 @@
 # Round TUIT bridge. Secrets are never kept here: they are set by the deploy workflow from GitHub secrets.
 #   FIREBASE_SERVICE_ACCOUNT   the Firebase service account's JSON key
+# The push key pair is made by the bridge itself on first use and kept in Firestore (config/vapid).
 name = "round-tuit-bridge"
 main = "src/index.js"
 compatibility_date = "2026-01-01"
@@ -9,3 +10,7 @@ compatibility_date = "2026-01-01"
 FIREBASE_PROJECT_ID = ""
 # The only places the bridge answers: the web address, and the iPhone app (capacitor://localhost).
 ALLOWED_ORIGINS = "https://learning-development667.github.io,capacitor://localhost"
+
+# Every minute: send reminders for jobs that are due, so they arrive with Round TUIT closed.
+[triggers]
+crons = ["* * * * *"]

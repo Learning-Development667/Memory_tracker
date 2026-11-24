@@ -94,14 +94,15 @@ export function startReminders(ui) {
     let changed = false;
     for (const t of notify) {
       t.alertedAt = now; changed = true;
-      if (document.hidden) showNotification(t, t.remind === 'nudge' ? 'Still to do' : 'Time to do this');
+      // With closed-app reminders on, the bridge sends background notifications; this would double them.
+      if (document.hidden) { if (!(ui.pushOn && ui.pushOn())) showNotification(t, t.remind === 'nudge' ? 'Still to do' : 'Time to do this'); }
       else ui.toast('Time to: ' + t.title);
     }
     if (buzz.length) {
       const t = buzz[0];
       if (!t.alertedAt) { t.alertedAt = now; changed = true; }
       if (document.hidden) {
-        if (now - (lastBuzzNote.get(t.id) || 0) >= BUZZ_NOTIFY_EVERY) { lastBuzzNote.set(t.id, now); showNotification(t, 'Open Round TUIT to tick it off or silence it'); }
+        if (!(ui.pushOn && ui.pushOn()) && now - (lastBuzzNote.get(t.id) || 0) >= BUZZ_NOTIFY_EVERY) { lastBuzzNote.set(t.id, now); showNotification(t, 'Open Round TUIT to tick it off or silence it'); }
       } else if (ui.buzzerOpenFor() !== t.id) ui.openBuzzer(t);
     }
     if (changed) store.save();

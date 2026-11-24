@@ -6,6 +6,7 @@ import * as store from './store.js';
 import { speakButton, stopSpeech, canSpeak } from './speech.js';
 import { LEVELS, SILENCE_FOR, startReminders, startSound, stopSound, unlockSound, askToNotify, notifyState } from './alarm.js';
 import { watchTextSize } from './textsize.js';
+import { enablePush, disablePush, pushOn, canPush } from './push.js';
 
 const $ = (sel, root) => (root || document).querySelector(sel);
 const TICK = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>';
@@ -443,6 +444,18 @@ function openFit() {
   show();
 }
 
+async function signOutHere() { await disablePush(sync); await sync.signOutNow(); }
+
+// Closed-app reminders: subscribe when sharing is on and notifications are allowed. Quietly does nothing otherwise.
+let pushTried = false;
+async function refreshPush(loud) {
+  if (!sync || !sync.status().circle) return false;
+  try { return await enablePush(sync, state.settings); }
+  catch (e) { if (loud) toast('Reminders with the app closed could not be switched on. ' + (e.message || '')); return false; }
+}
+let quietTimer = null;
+function quietChanged() { store.save(); clearTimeout(quietTimer); if (pushOn()) quietTimer = setTimeout(() => refreshPush(false), 800); }
+
 // The Sharing part of Settings. It redraws itself as sign-in and the shared list change.
 let joinCode = new URLSearchParams(location.search).get('join') || '';
 function sharingBox() {
@@ -493,7 +506,7 @@ function sharingBox() {
           if (!codeIn.value.trim()) { codeIn.focus(); throw new Error('Type the code from the other phone.'); }
           await sync.join(codeIn.value, myName()); joinCode = '';
         }) }),
-        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(() => sync.signOutNow()) }));
+        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(signOutHere) }));
     } else if (mode === 'invite') {
       out.push(el('p', { class: 'hint', text: 'Sharing is on for this phone. Now add the other phone.' }));
       if (code) {
@@ -505,13 +518,13 @@ function sharingBox() {
       }
       out.push(
         el('button', { type: 'button', class: code ? 'second' : 'primary', text: code ? 'Make a new code' : 'Make a code for the other phone', onclick: run(async () => { code = (await sync.invite()).code; draw(); }) }),
-        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(() => sync.signOutNow()) }));
+        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(signOutHere) }));
     } else {
       const them = st.members.find((m) => m.seat !== st.seat);
       out.push(
         el('p', { class: 'hint' }, 'Sharing with ', el('b', { text: them ? them.name : 'the other phone' }), '. A change on one phone shows on the other.'),
         el('p', { class: 'hint', text: 'Signed in as ' + st.user.email + '.' }),
-        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(() => sync.signOutNow()) }));
+        el('button', { type: 'button', class: 'linkbtn', text: 'Sign out on this phone', onclick: run(signOutHere) }));
     }
     box.replaceChildren(...out.filter(Boolean));
   };
@@ -556,11 +569,20 @@ function openSettings() {
   };
 
   const noteState = el('p', { class: 'rownote' });
-  const noteBtn = el('button', { type: 'button', class: 'second', text: 'Turn on notifications', onclick: async () => { unlockSound(); await askToNotify(); drawNote(); } });
+  const noteBtn = el('button', { type: 'button', class: 'second', text: 'Turn on notifications', onclick: async (e) => {
+    const btn = e.currentTarget; btn.disabled = true; unlockSound();
+    if (notifyState() === 'default') await askToNotify();
+    if (notifyState() === 'granted') await refreshPush(true);
+    btn.disabled = false; drawNote();
+  } });
   const drawNote = () => {
-    const s = notifyState();
-    noteBtn.hidden = s !== 'default';
-    noteState.textContent = s === 'granted' ? 'Notifications are on for this phone.'
+    const s = notifyState(), sharedOn = !!(sync && sync.status().circle);
+    const wantPush = s === 'granted' && sharedOn && canPush() && !pushOn();
+    noteBtn.hidden = !(s === 'default' || wantPush);
+    noteBtn.textContent = s === 'default' ? 'Turn on notifications' : 'Get reminders with the app closed';
+    noteState.textContent = s === 'granted' && pushOn() ? 'Reminders reach this phone even with Round TUIT closed.'
+      : s === 'granted' && !sharedOn ? 'Notifications are on. Reminders with the app closed start once sharing is on.'
+      : s === 'granted' ? 'Notifications are on for this phone.'
       : s === 'denied' ? 'Notifications are switched off for Round TUIT in this phone\'s Settings.'
       : s === 'unsupported' ? 'On iPhone, add Round TUIT to the Home Screen first (Share, then Add to Home Screen). Notifications work from there.'
       : 'Reminders show while Round TUIT is open. Turn on notifications to get them when it is in the background too.';
@@ -584,16 +606,16 @@ function openSettings() {
     el('h3', { class: 'sechead', text: 'Reminders' }),
     el('div', { class: 'rows' }, noteState,
       el('label', { class: 'row', for: 'qOn' }, el('span', { text: 'Quiet hours' }),
-        el('input', { type: 'checkbox', class: 'switch', id: 'qOn', checked: s.quietOn, onchange: (e) => { s.quietOn = e.target.checked; store.save(); } })),
-      el('label', { class: 'row', for: 'qFrom' }, el('span', { text: 'From' }), el('input', { type: 'time', id: 'qFrom', value: s.quietFrom, onchange: (e) => { if (e.target.value) { s.quietFrom = e.target.value; store.save(); } } })),
-      el('label', { class: 'row', for: 'qTo' }, el('span', { text: 'Until' }), el('input', { type: 'time', id: 'qTo', value: s.quietTo, onchange: (e) => { if (e.target.value) { s.quietTo = e.target.value; store.save(); } } })),
+        el('input', { type: 'checkbox', class: 'switch', id: 'qOn', checked: s.quietOn, onchange: (e) => { s.quietOn = e.target.checked; quietChanged(); } })),
+      el('label', { class: 'row', for: 'qFrom' }, el('span', { text: 'From' }), el('input', { type: 'time', id: 'qFrom', value: s.quietFrom, onchange: (e) => { if (e.target.value) { s.quietFrom = e.target.value; quietChanged(); } } })),
+      el('label', { class: 'row', for: 'qTo' }, el('span', { text: 'Until' }), el('input', { type: 'time', id: 'qTo', value: s.quietTo, onchange: (e) => { if (e.target.value) { s.quietTo = e.target.value; quietChanged(); } } })),
       el('p', { class: 'rownote', text: 'In quiet hours a Nudge waits until morning. A Buzzer you set for a time still sounds.' })),
     noteBtn,
     el('button', { type: 'button', class: 'second', text: 'Try the buzzer', onclick: () => { sheet.close(); openBuzzer(null); } }),
 
     el('h3', { class: 'sechead', text: 'About' }),
     el('a', { class: 'second linkrow', href: 'device.html', text: 'Screen check' }),
-    el('p', { class: 'about', text: 'Round TUIT, version 0.2. Made by Mark 1 Apps Ltd.' }),
+    el('p', { class: 'about', text: 'Round TUIT, version 0.3. Made by Mark 1 Apps Ltd.' }),
   ];
   openSheet('Settings', body, share.stop);
   drawColours(); drawNote(); share.draw();
@@ -632,7 +654,7 @@ document.addEventListener('pointerdown', unlockSound, { passive: true });
 render();
 store.save();
 
-startReminders({ toast, openBuzzer, buzzerOpenFor: () => buzzingId });
+startReminders({ toast, openBuzzer, buzzerOpenFor: () => buzzingId, pushOn });
 
 if (canShare) {
   let wasMe = store.me();
@@ -642,6 +664,7 @@ if (canShare) {
       // A phone that joins takes the second place, so "Mine" moves with it.
       if (store.me() !== wasMe) { if (view.list !== 'either') view.list = view.list === wasMe ? store.me() : store.other(); wasMe = store.me(); }
       if (!sheet.open) render(); else renderTabs();
+      if (!pushTried && m.status().circle && notifyState() === 'granted') { pushTried = true; refreshPush(false); }
     });
     return m.start();
   }).catch(() => { shareFailed = true; });
@@ -652,8 +675,21 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && !s
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
-  navigator.serviceWorker.addEventListener('message', (e) => {
-    const t = e.data && e.data.open && store.findTask(e.data.open);
-    if (t && !t.doneAt) { view.list = t.list; render(); if (t.remind === 'buzzer') openBuzzer(t); else openJob(t); }
-  });
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.open) openFromReminder(e.data.open); });
+}
+
+// A tapped reminder opens its job; a Buzzer job opens the buzzer. The job may still be on its way from
+// the shared list, so look again for a few seconds.
+function openFromReminder(id, tries) {
+  const t = store.findTask(id);
+  if (!t) { if ((tries || 0) < 10) setTimeout(() => openFromReminder(id, (tries || 0) + 1), 500); return; }
+  if (t.doneAt) return;
+  view.list = t.list === store.me() || t.list === 'either' ? t.list : view.list;
+  render();
+  if (t.remind === 'buzzer') openBuzzer(t); else openJob(t);
+}
+const openParam = new URLSearchParams(location.search).get('open');
+if (openParam && state.profile.setup) {
+  history.replaceState(null, '', location.pathname);
+  setTimeout(() => openFromReminder(openParam), 300);
 }

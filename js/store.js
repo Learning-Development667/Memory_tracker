@@ -1,6 +1,8 @@
 // What the app remembers. Always kept on this phone; when sharing is on, also kept in step
 // with the shared copy through the functions js/sync.js hands to attachRemote().
 
+import { alertAt } from './order.js';
+
 const KEY = 'round-tuit-v1';
 const KEEP_DONE_DAYS = 30;
 
@@ -109,8 +111,14 @@ function stable(v) {
   if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
   return JSON.stringify(v === undefined ? null : v);
 }
-// Whether this phone has sounded a reminder stays on this phone.
-function forRemote(t) { const c = Object.assign({}, t); delete c.alertedAt; return c; }
+// Whether this phone has sounded a reminder stays on this phone. alarmAt tells the bridge when to send
+// a reminder with the app closed: worked out here, in the phone's own time zone, and empty once done.
+function forRemote(t) {
+  const c = Object.assign({}, t);
+  delete c.alertedAt;
+  c.alarmAt = t.doneAt ? null : alertAt(t);
+  return c;
+}
 // Keep the same object, so a job that is open on screen stays the job in the list.
 function refill(target, from) {
   const alertedAt = target.alertedAt || 0;

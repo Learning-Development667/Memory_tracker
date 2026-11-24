@@ -29,6 +29,8 @@ Two people in one home, each on their own iPhone: one iPhone Duo (the foldable) 
 | 24 Nov 2026 | Sharing follows Daybook: email and password sign-in, one shared list for two people, joined by a one-use code. Its own Firebase project, not Daybook's. |
 | 24 Nov 2026 | A reminder sounds on the phone of the person the job is for; "Either of us" jobs sound on both. |
 | 24 Nov 2026 | TestFlight is available (Daybook uses it), so stage 5 will reuse Daybook's workflow with a new bundle id. |
+| 24 Nov 2026 | Closed-app reminders are web push sent by the bridge every minute. The bridge makes and keeps its own push key, so there is no key to set up by hand. Background notifications cannot be silenced from the banner on iPhone: Silence is on the buzzer screen. |
+| 24 Nov 2026 | Work goes straight to `main`, which GitHub Pages publishes. |
 
 ## How the order works
 Every job has a size (5 minutes up to a big job) and may have a date.
@@ -42,7 +44,7 @@ A big job with steps counts as a short job while it has a next step, so it does 
 | --- | --- | --- |
 | 1 | The app on one phone: lists, capture by sentence and speech, ordering, colours, steps, repeats, "I have 10 minutes", the in-app buzzer, the Duo layout | Built, this version |
 | 2 | Sharing between the two phones and sign-in, in Daybook's pattern: Firebase sign-in and Firestore, with a Cloudflare Worker bridge that alone writes who belongs | Built and tested on the emulator. Needs `docs/SETUP-SHARING.md` done before it is live |
-| 3 | Reminders when the app is closed: web push with the repeat run from the server | Needs stage 2 |
+| 3 | Reminders when the app is closed: the bridge checks every minute and sends web push, with Quiet, Nudge and Buzzer repeats, Silence and quiet hours | Built and tested on the emulator. Live once sharing is set up; needs the Home Screen app and notifications allowed |
 | 4 | AI size guesses; add from Siri or the Action Button; morning summary | Needs stage 2 |
 | 5 | Capacitor wrap and TestFlight, for a buzzer that can sound through silent mode | After stage 3 is judged on the real phones |
 

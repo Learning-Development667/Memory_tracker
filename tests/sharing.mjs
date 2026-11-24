@@ -11,7 +11,8 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeBridge, Refused } from '../worker/src/index.js';
+import { makeBridge, makeScheduler, Refused } from '../worker/src/index.js';
+import { createECDH, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -33,6 +34,7 @@ const bridge = makeBridge({
     return { uid: claims.sub, email: claims.email || '' };
   },
   database: () => ({ root: DOCS, name: 'projects/' + PROJECT + '/databases/(default)/documents', headers: async () => ({ Authorization: 'Bearer owner' }) }),
+  pushHostOk: (url) => String(url).startsWith('http://127.0.0.1:'), // the stand-in push service below
 });
 let site = '';
 const bridgeServer = createServer(async (req, res) => {
@@ -42,6 +44,16 @@ const bridgeServer = createServer(async (req, res) => {
   res.writeHead(out.status, Object.fromEntries(out.headers)); res.end(Buffer.from(await out.arrayBuffer()));
 });
 const bridgeUrl = await listen(bridgeServer);
+
+/* A stand-in for Apple's push service: keeps what it is sent. */
+const pushed = [];
+let pushReply = 201;
+const pushServer = createServer(async (req, res) => {
+  const chunks = []; for await (const c of req) chunks.push(c);
+  pushed.push({ path: req.url, headers: req.headers, body: Buffer.concat(chunks) });
+  res.writeHead(pushReply); res.end();
+});
+const pushUrl = await listen(pushServer);
 
 /* The app, with config.js pointed at the emulator. */
 const siteServer = createServer(async (req, res) => {
@@ -210,6 +222,9 @@ try {
   await tryIt('a job filed under another id was accepted', false, 'PATCH', C + '/tasks/breakin3', alex, task());
   await tryIt('a huge title was accepted', false, 'PATCH', C + '/tasks/breakin1', alex, task({ title: { stringValue: 'x'.repeat(301) } }));
   await tryIt('a member could not remove a job', true, 'DELETE', C + '/tasks/breakin1', alex);
+  await tryIt('a member read the push key', false, 'GET', '/config/vapid', alex);
+  await tryIt('a member wrote a push address', false, 'PATCH', C + '/push/' + alex.localId, alex, { fields: { sub: { stringValue: 'x' } } });
+  await tryIt('a member read what reminders were sent', false, 'GET', C + '/bridge/sent', alex);
 
   /* ---------- 3. The bridge refuses what it should ---------- */
   const call = async (path, who, body, origin) => fetch(bridgeUrl + path, { method: 'POST', headers: { 'content-type': 'application/json', Origin: origin || site, Authorization: 'Bearer ' + (who ? who.idToken : '') }, body: JSON.stringify(body || {}) });
@@ -222,10 +237,89 @@ try {
   let last = 0;
   for (let i = 0; i < 12; i++) last = (await call('/join', kit, { code: 'YYYYYYY' + 'ABCDEFGHJKMN'[i], name: 'Kit' })).status;
   expect(last === 429, 'the bridge did not stop repeated guesses at a code (' + last + ')');
+
+  /* ---------- 4. Reminders with the app closed ---------- */
+  // Alex's phone subscribes. The bridge must accept only real push services: the stand-in is let through by the test.
+  const ecdh = createECDH('prime256v1'); ecdh.generateKeys();
+  const authSecret = randomBytes(16);
+  const subscription = { endpoint: pushUrl + '/alex', keys: { p256dh: ecdh.getPublicKey().toString('base64url'), auth: authSecret.toString('base64url') } };
+  const keyReply = await (await call('/push-key', alex)).json();
+  expect(/^[A-Za-z0-9_-]{87}$/.test(keyReply.key || ''), 'the bridge did not give its push key');
+  expect((await call('/push', alex, { subscription: { endpoint: 'https://evil.example/x', keys: subscription.keys } })).status === 400, 'the bridge accepted a push address that is not a push service');
+  expect((await call('/push-key', kit)).status === 403, 'the bridge gave its push key to someone on no list');
+  expect((await call('/push', alex, { subscription, quiet: { on: false, from: '22:00', to: '07:00' }, tz: 'Europe/London' })).ok, 'the bridge refused a good subscription');
+
+  // A Buzzer job saved from Alex's phone, and a job for Sam that must not reach Alex.
+  await a.tab('Mine');
+  await a.page.click('#addBtn');
+  await a.page.fill('#jt', 'Take the tablets within the hour');
+  await a.page.locator('details.more > summary').click();
+  await a.page.selectOption('#jRemind', 'buzzer');
+  await a.page.getByRole('button', { name: 'Save job' }).click();
+  await a.add('Post the letter within the hour, for Sam');
+  const findTask = async (title) => {
+    for (let i = 0; i < 40; i++) {
+      const r = await (await fetch(DOCS + C + '/tasks?pageSize=100', { headers: owner })).json();
+      const d = (r.documents || []).find((x) => x.fields.title.stringValue === title);
+      if (d && d.fields.alarmAt && d.fields.alarmAt.integerValue) return { name: d.name, alarmAt: Number(d.fields.alarmAt.integerValue) };
+      await new Promise((r2) => setTimeout(r2, 250));
+    }
+    return null;
+  };
+  const tablets = await findTask('Take the tablets');
+  expect(tablets, 'the job reached the shared list without a reminder time');
+  if (tablets) {
+    const env = { FIREBASE_PROJECT_ID: PROJECT };
+    const at = (ms) => makeScheduler({ database: () => ({ root: DOCS, name: 'projects/' + PROJECT + '/databases/(default)/documents', headers: async () => ({ Authorization: 'Bearer owner' }) }), now: () => ms, pushHostOk: (u) => String(u).startsWith('http://127.0.0.1:') })(env);
+    const T = tablets.alarmAt + 1000, MIN = 60000;
+    const read = (m) => {
+      const b = m.body, salt = b.subarray(0, 16), asPublic = b.subarray(21, 86);
+      const ikm = Buffer.from(hkdfSync('sha256', ecdh.computeSecret(asPublic), authSecret, Buffer.concat([Buffer.from('WebPush: info\0'), ecdh.getPublicKey(), asPublic]), 32));
+      const d = createDecipheriv('aes-128-gcm', Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16)), Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12)));
+      const data = b.subarray(86); d.setAuthTag(data.subarray(data.length - 16));
+      const plain = Buffer.concat([d.update(data.subarray(0, data.length - 16)), d.final()]);
+      return JSON.parse(plain.subarray(0, plain.length - 1).toString());
+    };
+
+    expect(await at(tablets.alarmAt - MIN) === 0, 'a reminder went before its time');
+    pushed.length = 0;
+    const sent1 = await at(T);
+    expect(sent1 === 1 && pushed.length === 1, 'the due Buzzer job did not send exactly one message (' + sent1 + ', ' + pushed.length + ')');
+    if (pushed[0]) {
+      const m = read(pushed[0]);
+      expect(m.title === 'Take the tablets' && m.kind === 'buzzer', 'the message did not name the job: ' + JSON.stringify(m));
+      expect(String(pushed[0].headers.authorization || '').startsWith('vapid t='), 'the message was not signed');
+      expect(pushed[0].headers['content-encoding'] === 'aes128gcm', 'the message was not encrypted');
+    }
+    pushed.length = 0;
+    expect(await at(T + MIN) === 0, 'the buzzer repeated after one minute instead of two');
+    expect(await at(T + 2 * MIN) === 1, 'the buzzer did not come back after two minutes');
+
+    // Silence for 10 minutes, as the buzzer screen does.
+    await fetch(DOCS.replace(/\/documents$/, '') + '/documents' + tablets.name.split('/documents')[1] + '?updateMask.fieldPaths=silencedUntil', { method: 'PATCH', headers: Object.assign({ 'content-type': 'application/json' }, owner), body: JSON.stringify({ fields: { silencedUntil: { integerValue: String(T + 2 * MIN + 10 * MIN) } } }) });
+    expect(await at(T + 6 * MIN) === 0, 'Silence did not pause the buzzer');
+    expect(await at(T + 13 * MIN) === 1, 'the buzzer did not come back after Silence');
+
+    // Ticked on the phone: no more messages.
+    await a.page.getByRole('button', { name: 'Done: Take the tablets' }).click();
+    let stopped = false;
+    for (let i = 0; i < 40 && !stopped; i++) { stopped = (await at(T + 20 * MIN)) === 0; if (!stopped) await new Promise((r2) => setTimeout(r2, 250)); }
+    expect(stopped, 'the buzzer kept going after the job was ticked');
+    expect(pushed.every((m) => read(m).title === 'Take the tablets'), "a job on Sam's list was sent to Alex's phone");
+
+    // A phone that has gone away: the push service says 410, and the bridge forgets it.
+    await a.add('Ring the dentist within the hour');
+    const dentist = await findTask('Ring the dentist');
+    pushReply = 410;
+    await at(dentist.alarmAt + 1000);
+    pushReply = 201;
+    const gone = await fetch(DOCS + C + '/push/' + alex.localId, { headers: owner });
+    expect(gone.status === 404, 'a subscription the push service said was gone was kept');
+  }
 } catch (e) {
   problems.push('the test stopped: ' + (e.stack || e.message));
 }
 
-await browser.close(); bridgeServer.close(); siteServer.close();
+await browser.close(); bridgeServer.close(); siteServer.close(); pushServer.close();
 if (problems.length) { console.log(problems.length + ' problems:\n' + problems.join('\n')); process.exit(1); }
-console.log('Sharing works between two phones, and every break-in was refused.');
+console.log('Sharing works between two phones, every break-in was refused, and closed-app reminders arrive, repeat, pause and stop as they should.');

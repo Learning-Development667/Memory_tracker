@@ -121,3 +121,4 @@ export const startSharing = (name) => bridge('/circle', { name });
 export const invite = () => bridge('/invite');
 export const join = (code, name) => bridge('/join', { code, name });
 export const rename = (name) => bridge('/name', { name });
+export const call = bridge;

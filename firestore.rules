@@ -19,6 +19,7 @@ service cloud.firestore {
         && d.addedBy in ['a', 'b']
         && d.size is number
         && (d.due == null || d.due is number)
+        && (!('alarmAt' in d) || d.alarmAt == null || d.alarmAt is number)
         && d.steps is list && d.steps.size() <= 50
         && d.keys().size() <= 24;
     }
@@ -51,7 +52,7 @@ service cloud.firestore {
       }
     }
 
-    // Invite codes, try counters and anything else: the bridge only.
+    // Invite codes, try counters, push addresses, the push key and anything else: the bridge only.
     match /{document=**} {
       allow read, write: if false;
     }

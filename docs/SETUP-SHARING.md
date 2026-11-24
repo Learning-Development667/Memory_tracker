@@ -42,6 +42,14 @@ Close and open Round TUIT on both phones so they pick up the new settings.
 
 Jobs already on each phone go up to the shared list. The code works once and runs out after 7 days. The list holds two people.
 
+## 6. Reminders with the app closed
+Nothing extra to set up: the bridge runs every minute and makes its own push key the first time. On each phone:
+1. Open Round TUIT **from the Home Screen** (iPhone only allows notifications there, not in Safari).
+2. Settings, Reminders, **Turn on notifications**, and Allow.
+3. The line above the button should then say "Reminders reach this phone even with Round TUIT closed."
+
+A job sounds on the phone of the person it is for; an "Either of us" job sounds on both. Each phone's quiet hours are its own.
+
 ## If something is wrong
 | What you see | What to check |
 | --- | --- |
@@ -50,6 +58,7 @@ Jobs already on each phone go up to the shared list. The code works once and run
 | "Sign in again" on Start | `FIREBASE_PROJECT_ID` in `worker/wrangler.toml` does not match the project |
 | "Sharing is not switched on yet" after Start | The `FIREBASE_SERVICE_ACCOUNT` secret is missing or not the whole JSON; run the workflow again after fixing it |
 | "The shared list could not be read" | The rules were not published (step 1.5) |
+| No reminders with the app closed | The app was opened in Safari, not from the Home Screen; or notifications are off for Round TUIT in the phone's Settings, Notifications; or a Focus is on. Then check the bridge's log in Cloudflare (Workers, round-tuit-bridge, Logs) for the minute runs |
 
 ## How it was tested
-`tests/sharing.mjs` runs two browsers as two phones against Firebase's local emulator: sign up, start, invite, join, add for each other, tick, change, remove, reopen. It then tries 18 break-ins straight at the database (a stranger, someone signed out, a member reaching for membership records, badly formed jobs) and 7 at the bridge. Every one must be refused. `tests/bridge.test.mjs` checks that forged, expired, unsigned and wrong-project sign-in tokens are refused. None of this has run against the real Firebase or Cloudflare yet: the first real run is step 5.
+`tests/sharing.mjs` runs two browsers as two phones against Firebase's local emulator: sign up, start, invite, join, add for each other, tick, change, remove, reopen. It then tries 21 break-ins straight at the database (a stranger, someone signed out, a member reaching for membership records, badly formed jobs) and 10 at the bridge. Every one must be refused. Last, it runs the minute timer against a job saved from the app and a stand-in push service: the message arrives encrypted and signed, a Buzzer repeats every 2 minutes, Silence pauses it, ticking stops it, and a job on the other list never reaches the wrong phone. `tests/push.test.mjs` checks the encryption by decrypting it a separate way. `tests/bridge.test.mjs` checks that forged, expired, unsigned and wrong-project sign-in tokens are refused. None of this has run against the real Firebase, Cloudflare or Apple push yet: the first real run is steps 5 and 6.
