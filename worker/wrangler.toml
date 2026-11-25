@@ -7,7 +7,7 @@ compatibility_date = "2026-01-01"
 
 [vars]
 # The Firebase project id (public). Fill in when the project exists: see docs/SETUP-SHARING.md.
-FIREBASE_PROJECT_ID = ""
+FIREBASE_PROJECT_ID = "round-tuit-4b1d9"
 # The only places the bridge answers: the web address, and the iPhone app (capacitor://localhost).
 ALLOWED_ORIGINS = "https://learning-development667.github.io,capacitor://localhost"
 
