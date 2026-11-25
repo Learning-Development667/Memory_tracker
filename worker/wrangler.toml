@@ -4,6 +4,8 @@
 name = "round-tuit-bridge"
 main = "src/index.js"
 compatibility_date = "2026-01-01"
+workers_dev = true
+preview_urls = false
 
 [vars]
 # The Firebase project id (public). Fill in when the project exists: see docs/SETUP-SHARING.md.

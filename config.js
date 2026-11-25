@@ -8,5 +8,5 @@ window.ROUND_TUIT_CONFIG = {
     projectId: 'round-tuit-4b1d9',
     appId: '1:433292677239:web:af14bf95e6e027428f3672',
   },
-  bridge: '', // the Cloudflare Worker's address, for example https://round-tuit-bridge.example.workers.dev
+  bridge: 'https://round-tuit-bridge.markbrown667.workers.dev', // the Cloudflare Worker (worker/)
 };
