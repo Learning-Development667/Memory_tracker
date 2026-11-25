@@ -17,6 +17,20 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # Shows only the shape of each secret (lines and lengths), never its content.
+      - name: Check the secrets are pasted cleanly
+        env:
+          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          A: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          F: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          shape() { printf '%s' "$2" | awk -v n="$1" '{ printf "%s line %d: %d characters\n", n, NR, length($0) } END { printf "%s: %d line(s)\n", n, NR }'; }
+          shape CLOUDFLARE_API_TOKEN "$T"
+          shape CLOUDFLARE_ACCOUNT_ID "$A"
+          printf '%s' "$F" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log("FIREBASE_SERVICE_ACCOUNT: valid JSON, project "+j.project_id+", has key: "+!!j.private_key)}catch(e){console.log("FIREBASE_SERVICE_ACCOUNT: NOT valid JSON")}})'
+          if [ "$(printf '%s' "$T" | wc -l)" -gt 0 ] || printf '%s' "$T" | grep -q '[[:space:]]'; then echo "::error::CLOUDFLARE_API_TOKEN has more than the token in it (a line break or space). Paste only the token."; exit 1; fi
+          if ! printf '%s' "$A" | grep -Eq '^[0-9a-f]{32}$'; then echo "::error::CLOUDFLARE_ACCOUNT_ID should be 32 letters and numbers only."; exit 1; fi
+
       - name: Deploy and set the service account
         uses: cloudflare/wrangler-action@v3
         with:
