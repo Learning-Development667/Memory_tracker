@@ -486,7 +486,7 @@ function sharingBox() {
         if (pass.value.length < 8) { pass.focus(); throw new Error('Use a password of 8 characters or more.'); }
       };
       out.push(
-        el('p', { class: 'hint', text: 'To see each other\'s jobs, each of you signs in on your own phone with your own email.' }),
+        el('p', { class: 'hint', text: 'To see each other\'s jobs, each of you signs in on your own phone with your own email. The first time, use Create an account.' }),
         el('label', { class: 'lab', for: 'shEmail', text: 'Email' }), email,
         el('label', { class: 'lab', for: 'shPass', text: 'Password' }), pass,
         el('button', { type: 'button', class: 'primary', text: 'Sign in', onclick: run(async () => { need(); await sync.signIn(email.value, pass.value); }) }),

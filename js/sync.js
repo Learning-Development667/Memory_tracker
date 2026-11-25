@@ -27,7 +27,8 @@ let stopPointer = null, stopCircle = [];
 
 function plain(e) {
   const code = (e && e.code) || '';
-  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(code)) return 'That email and password do not match.';
+  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(code)) return 'That email and password do not match an account. First time here? Tap Create an account instead.';
+  if (/operation-not-allowed/.test(code)) return 'Email sign-in is not switched on in Firebase yet.';
   if (/email-already-in-use/.test(code)) return 'There is already an account for that email. Sign in instead.';
   if (/weak-password/.test(code)) return 'Use a longer password: 8 characters or more.';
   if (/invalid-email|missing-email/.test(code)) return 'That does not look like an email address.';
