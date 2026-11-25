@@ -149,6 +149,8 @@ dialog { color: var(--ink); }
   .sheet { inset: 0; width: min(var(--col), calc(100% - var(--safe-l) - var(--safe-r) - 48px)); max-height: min(86dvh, 900px); margin: auto; border-radius: 28px; }
 }
 .sheethead { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 10px 8px 20px; background: var(--page); }
+.sheethead .iconbtn { margin-right: 0; }
+.sheet:focus { outline: none; }
 .sheethead h2 { min-width: 0; font: 600 1.5rem/1.15 var(--serif); color: var(--plum); overflow-wrap: anywhere; }
 .sheetbody { padding: 4px 20px calc(20px + var(--safe-b)); }
 @media (min-width: 700px) { .sheetbody { padding-bottom: 24px; } }

@@ -246,6 +246,7 @@ function openSheet(title, body, onclose) {
   sheet.replaceChildren(head, el('div', { class: 'sheetbody' }, body));
   sheet.onclose = () => { stopSpeech(); sheet.replaceChildren(); if (onclose) onclose(); render(); };
   if (!sheet.open) sheet.showModal();
+  sheet.focus(); // start on the sheet itself, not its close button, so no focus ring shows on opening
   sheet.scrollTop = 0;
 }
 sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
