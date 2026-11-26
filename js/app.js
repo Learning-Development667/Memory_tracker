@@ -467,7 +467,12 @@ function sharingBox() {
     try { await fn(); } catch (err) { toast(err.message || 'That did not work. Try again in a moment.'); }
     btn.disabled = false;
   };
-  const myName = () => state.profile.names[store.me()] || 'Me';
+  // Never send a stand-in: the other phone shows this name on its tab.
+  const myName = () => {
+    const n = String(state.profile.names[store.me()] || '').trim();
+    if (!n || /^me$/i.test(n)) throw new Error('Add your first name under Who is who, below, first.');
+    return n;
+  };
   const draw = () => {
     const st = sync ? sync.status() : null;
     const mode = !canShare ? 'off' : shareFailed ? 'failed' : !st || !st.ready ? 'wait' : !st.user ? 'out' : !st.circle ? 'alone' : st.members.length < 2 ? 'invite' : 'both';

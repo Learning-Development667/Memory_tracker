@@ -1,5 +1,5 @@
 // Round TUIT service worker: the app opens with no signal, and a tapped reminder opens its job.
-const CACHE = 'round-tuit-v7';
+const CACHE = 'round-tuit-v8';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'device.html',
   'config.js', 'js/app.js', 'js/sync.js', 'js/push.js', 'vendor/firebase/firebase-app.js', 'vendor/firebase/firebase-auth.js', 'vendor/firebase/firebase-firestore.js', 'js/order.js', 'js/parse.js', 'js/store.js', 'js/speech.js', 'js/alarm.js', 'js/textsize.js',
   'fonts/fraunces-latin-wght-normal.woff2', 'fonts/inter-latin-wght-normal.woff2',
