@@ -138,6 +138,22 @@ try {
   await a.tab("Sam's");
   expect(await a.has('Feed the cat') && await a.has('Post the parcel'), "the second phone's jobs do not show on the first phone");
 
+  // Either person can correct a job on the other's list, and the change shows on both phones.
+  await a.page.locator('.jobbody', { hasText: 'Feed the cat' }).click();
+  expect(await a.page.locator('#jt').isEditable(), "a job on the other person's list could not be edited");
+  await a.page.fill('#jt', 'Feed the cat at 6');
+  await a.page.getByRole('button', { name: 'Save changes' }).click();
+  expect(await a.has('Feed the cat at 6'), "an edit to the other person's job did not stay on the editing phone");
+  expect(await b.has('Feed the cat at 6'), "an edit to someone's job did not reach their phone");
+  await b.tab("Alex's");
+  await b.page.locator('.jobbody', { hasText: 'Tidy the snug' }).click();
+  await b.page.fill('#jt', 'Tidy the snug properly');
+  await b.page.getByRole('button', { name: 'Save changes' }).click();
+  await b.tab('Mine');
+  await a.tab('Mine');
+  expect(await a.has('Tidy the snug properly'), "an edit made on the other phone did not reach the owner's phone");
+  await a.tab("Sam's");
+
   // Ticking on one phone clears it on the other.
   await b.page.getByRole('button', { name: 'Done: Post the parcel' }).click();
   expect(await a.gone('Post the parcel'), 'a job ticked on one phone stayed on the other');
@@ -164,7 +180,7 @@ try {
   // Closing and opening again: still signed in, list still there.
   await b.page.reload();
   await b.tab('Mine');
-  expect(await b.has('Feed the cat'), 'the list was lost on opening the app again');
+  expect(await b.has('Feed the cat at 6'), 'the list was lost on opening the app again');
   await b.page.click('#settingsBtn');
   await b.page.getByText('Sharing with').waitFor({ timeout: 10000 }).catch(() => problems.push('the second phone was signed out by opening the app again'));
   await b.close();
@@ -172,10 +188,10 @@ try {
   // A job removed while the other phone was closed must not come back when it opens.
   await b.context.close();
   await a.tab("Sam's");
-  await a.page.locator('.jobbody', { hasText: 'Feed the cat' }).click();
+  await a.page.locator('.jobbody', { hasText: 'Feed the cat at 6' }).click();
   await a.page.getByRole('button', { name: 'Delete this job' }).click();
   await a.page.getByRole('button', { name: 'Tap again to delete' }).click();
-  await a.gone('Feed the cat');
+  await a.gone('Feed the cat at 6');
 
   // A third person with the same code is refused: it works once, and the list holds two.
   const c = await phone('Kit', 'Alex');

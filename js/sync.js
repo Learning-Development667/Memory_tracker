@@ -51,7 +51,14 @@ async function openCircle(cid, uid) {
   store.setSeat(st.seat, cid);
 
   const tasks = collection(db, 'circles', cid, 'tasks'), labels = doc(db, 'circles', cid, 'meta', 'labels');
-  const quiet = () => {}; // a write that fails is retried by Firestore when the signal comes back
+  // Firestore retries a write that fails for want of signal by itself. A write the shared list refuses
+  // is said out loud, with the reason, so it is never silently undone.
+  const quiet = (e) => {
+    const code = String((e && e.code) || '');
+    if (/unavailable|deadline|cancelled/.test(code)) return;
+    st.problem = 'A change did not save to the shared list (' + (code.replace(/^firestore\//, '') || 'unknown') + '). Close and open Round TUIT, then try again.';
+    tell();
+  };
   store.attachRemote({
     setTask: (t) => setDoc(doc(tasks, t.id), t).catch(quiet),
     deleteTask: (id) => deleteDoc(doc(tasks, id)).catch(quiet),

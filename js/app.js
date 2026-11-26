@@ -448,7 +448,7 @@ function openFit() {
 async function signOutHere() { await disablePush(sync); await sync.signOutNow(); }
 
 // Closed-app reminders: subscribe when sharing is on and notifications are allowed. Quietly does nothing otherwise.
-let pushTried = false;
+let pushTried = false, lastProblem = '';
 async function refreshPush(loud) {
   if (!sync || !sync.status().circle) return false;
   try { return await enablePush(sync, state.settings); }
@@ -671,6 +671,8 @@ if (canShare) {
       if (store.me() !== wasMe) { if (view.list !== 'either') view.list = view.list === wasMe ? store.me() : store.other(); wasMe = store.me(); }
       if (!sheet.open) render(); else renderTabs();
       if (!pushTried && m.status().circle && notifyState() === 'granted') { pushTried = true; refreshPush(false); }
+      if (m.status().problem && m.status().problem !== lastProblem) toast(m.status().problem);
+      lastProblem = m.status().problem;
     });
     return m.start();
   }).catch(() => { shareFailed = true; });
