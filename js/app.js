@@ -1,6 +1,6 @@
 // Round TUIT: the screens.
 
-import { MIN, DAY, SIZES, BANDS, arrange, isStale, effectiveSize, openSteps, sizeIndex, sizeInfo, dueWords, whenWords, startOfDay, endOfDay, nextRepeat } from './order.js';
+import { MIN, DAY, SIZES, BANDS, arrange, isStale, effectiveSize, openSteps, sizeIndex, sizeInfo, dueWords, whenWords, startOfDay, endOfDay, nextRepeat, plannedToday, nextWorkDay, dayWord } from './order.js';
 import { parseSentence, guessSize, whenStops } from './parse.js';
 import * as store from './store.js';
 import { speakButton, stopSpeech, canSpeak } from './speech.js';
@@ -106,6 +106,8 @@ function jobRow(t, now, opts) {
   const bits = [];
   if (!t.doneAt) bits.push(document.createTextNode(sizeInfo(effectiveSize(t)).short));
   if (due.text && !t.doneAt) bits.push(el('span', { class: due.state || null, text: due.text }));
+  if (!t.doneAt && plannedToday(t, now)) bits.push(el('span', { class: 'planned', text: 'Planned for today' }));
+  else if (!t.doneAt && nextWorkDay(t, now)) bits.push(document.createTextNode('Planned ' + dayWord(nextWorkDay(t, now), now).replace(/^(Today|Tomorrow|Yesterday)$/, (w) => w.toLowerCase())));
   if (label) { const s = el('span', {}, el('i', { class: 'dot' }), label.name); bits.push(s); }
   if (t.due && !t.doneAt && t.remind !== 'quiet') bits.push(document.createTextNode(t.remind === 'buzzer' ? 'Buzzer' : 'Nudge'));
   if (t.repeat) bits.push(document.createTextNode(REPEATS.find((r) => r[0] === t.repeat)[1]));
@@ -268,13 +270,66 @@ function localInput(ms) { // for <input type="datetime-local">
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
+// A month calendar for choosing the days to work on a job. Tap a day to plan it, tap again to unplan.
+// Weeks start on Monday. Past days cannot be chosen.
+const CHEV = (d) => '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+function dayPlanner(f, now, changed) {
+  const today = startOfDay(now);
+  const ahead = f.workDays.filter((d) => d >= today);
+  const month = new Date(ahead.length ? Math.min(...ahead) : today);
+  month.setDate(1); month.setHours(0, 0, 0, 0);
+  const box = el('div', { class: 'planner' });
+  const label = el('p', { class: 'lab', id: 'planLab', text: 'Days to work on it' });
+  const summary = el('p', { class: 'hint', 'aria-live': 'polite' });
+  const monthName = el('p', { class: 'calmonth', 'aria-live': 'polite' });
+  const prev = el('button', { type: 'button', class: 'iconbtn calnav', 'aria-label': 'Previous month', svg: CHEV('M15 5l-7 7 7 7'), onclick: () => { month.setMonth(month.getMonth() - 1); draw(); } });
+  const next = el('button', { type: 'button', class: 'iconbtn calnav', 'aria-label': 'Next month', svg: CHEV('M9 5l7 7-7 7'), onclick: () => { month.setMonth(month.getMonth() + 1); draw(); } });
+  const grid = el('div', { class: 'cal', role: 'group', 'aria-labelledby': 'planLab' });
+  const LONG_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const draw = () => {
+    const y = month.getFullYear(), m = month.getMonth();
+    monthName.textContent = MONTHS[m] + ' ' + y;
+    prev.disabled = new Date(y, m, 1).getTime() <= new Date(new Date(today).getFullYear(), new Date(today).getMonth(), 1).getTime();
+    const dueDay = f.due ? startOfDay(f.due) : null;
+    const cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => el('span', { class: 'calhead', 'aria-hidden': 'true', text: d }));
+    const lead = (new Date(y, m, 1).getDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) cells.push(el('span', { 'aria-hidden': 'true' }));
+    const last = new Date(y, m + 1, 0).getDate();
+    for (let d = 1; d <= last; d++) {
+      const ms = new Date(y, m, d).getTime(), on = f.workDays.includes(ms);
+      const words = LONG_DAYS[new Date(ms).getDay()] + ' ' + d + ' ' + MONTHS[m] + (ms === today ? ', today' : '') + (ms === dueDay ? ', the due date' : '');
+      cells.push(el('button', {
+        type: 'button', 'aria-pressed': on ? 'true' : 'false', 'aria-label': words, disabled: ms < today,
+        class: 'calday' + (on ? ' on' : '') + (ms === today ? ' today' : '') + (ms === dueDay ? ' due' : ''),
+        onclick: () => {
+          f.workDays = on ? f.workDays.filter((x) => x !== ms) : f.workDays.concat(ms).sort((a, b) => a - b);
+          draw(); changed();
+        },
+      }, el('span', { class: 'n', text: String(d) })));
+    }
+    grid.replaceChildren(...cells);
+    const chosen = f.workDays.filter((d) => d >= today);
+    if (!chosen.length) summary.textContent = 'Tap the days you plan to work on it. On those days it moves up to Next up.';
+    else {
+      const names = chosen.map((d) => dayWord(d, now) + (Math.round((d - today) / DAY) < 7 && Math.round((d - today) / DAY) > 1 ? ' ' + new Date(d).getDate() + ' ' + MONTHS[new Date(d).getMonth()].slice(0, 3) : ''));
+      summary.textContent = (chosen.length === 1 ? '1 day planned: ' : chosen.length + ' days planned: ') + (names.length > 4 ? names.slice(0, 4).join(', ') + ' and ' + (names.length - 4) + ' more' : names.join(', ')) + '.';
+    }
+  };
+  box.append(label, summary,
+    el('div', { class: 'calbar' }, prev, monthName, next),
+    grid,
+    el('p', { class: 'callegend', 'aria-hidden': 'true' }, el('span', { class: 'k today' }), 'Today ', el('span', { class: 'k due' }), 'Due date ', el('span', { class: 'k on' }), 'Planned'));
+  draw();
+  return { box, draw };
+}
+
 // Add a job, or change one. opts.speak starts listening straight away.
 function openJob(task, opts) {
   const o = opts || {}, adding = !task, now = Date.now();
   const stops = whenStops(now);
   const f = adding
-    ? { due: null, hasTime: false, size: 15, sizeFrom: 'guess', list: view.list, remind: 'quiet', label: '', repeat: '', steps: [] }
-    : { due: task.due, hasTime: task.hasTime, size: task.size, sizeFrom: task.sizeFrom, list: task.list, remind: task.remind, label: task.label, repeat: task.repeat, steps: (task.steps || []).map((s) => Object.assign({}, s)) };
+    ? { due: null, hasTime: false, size: 15, sizeFrom: 'guess', list: view.list, remind: 'quiet', label: '', repeat: '', steps: [], workDays: [] }
+    : { due: task.due, hasTime: task.hasTime, size: task.size, sizeFrom: task.sizeFrom, list: task.list, remind: task.remind, label: task.label, repeat: task.repeat, steps: (task.steps || []).map((s) => Object.assign({}, s)), workDays: (task.workDays || []).map(startOfDay) };
   const touched = { when: false, size: false, list: false, remind: false };
   let stopLabel = '';
 
@@ -301,6 +356,7 @@ function openJob(task, opts) {
     const text = stopLabel && f.due ? stopLabel + ': ' + words.charAt(0).toLowerCase() + words.slice(1) : words;
     whenOut.textContent = text; whenRange.setAttribute('aria-valuetext', text); setFill(whenRange);
     remind.sel.disabled = !f.due; remindNote.textContent = remindWords();
+    if (planner) planner.draw();
   };
   whenRange.addEventListener('input', () => {
     const s = stops[Number(whenRange.value)];
@@ -321,7 +377,10 @@ function openJob(task, opts) {
     sizeRange.value = String(sizeIndex(f.size));
     const text = SIZES[sizeIndex(f.size)].long + (f.sizeFrom === 'guess' ? ' (a guess)' : '');
     sizeOut.textContent = text; sizeRange.setAttribute('aria-valuetext', text); setFill(sizeRange);
+    if (planner) planner.box.hidden = !(f.size >= 240 || f.workDays.length);
   };
+  // Days to work on it: for jobs of half a day or more, or any job that already has days planned.
+  const planner = dayPlanner(f, now, () => showWhen(false));
   sizeRange.addEventListener('input', () => { f.size = SIZES[Number(sizeRange.value)].min; f.sizeFrom = 'you'; touched.size = true; showSize(); });
 
   // Plain rows
@@ -376,7 +435,9 @@ function openJob(task, opts) {
     if (pending) f.steps.push({ id: store.uid(), title: pending, done: false });
     const steps = f.steps.filter((s) => s.title.trim()).map((s) => ({ id: s.id, title: s.title.trim(), done: !!s.done }));
     if (f.repeat && !f.due) { f.due = endOfDay(Date.now()); f.hasTime = false; }
-    const fields = { title: name, due: f.due, hasTime: f.hasTime, size: f.size, sizeFrom: f.sizeFrom, list: f.list, remind: f.remind, label: f.label, repeat: f.repeat, steps };
+    const today = startOfDay(Date.now());
+    const workDays = [...new Set(f.workDays.map(startOfDay))].filter((d) => d >= today).sort((a, b) => a - b);
+    const fields = { title: name, due: f.due, hasTime: f.hasTime, size: f.size, sizeFrom: f.sizeFrom, list: f.list, remind: f.remind, label: f.label, repeat: f.repeat, steps, workDays };
     if (adding) {
       state.tasks.push(store.newTask(fields));
       sheet.close(); store.save();
@@ -406,7 +467,8 @@ function openJob(task, opts) {
     el('div', { class: 'field' },
       el('div', { class: 'top' }, el('label', { class: 'lab', for: 'sizeRange', text: 'How long' }), sizeOut),
       sizeRange,
-      el('div', { class: 'ends', 'aria-hidden': 'true' }, el('span', { text: '5 minutes' }), el('span', { text: 'A big job' }))),
+      el('div', { class: 'ends', 'aria-hidden': 'true' }, el('span', { text: '5 minutes' }), el('span', { text: 'A week' }))),
+    planner.box,
     el('div', { class: 'rows' }, list.row),
     el('details', { class: 'more', open: !adding },
       el('summary', { text: 'Reminder, colour, repeats and steps' }),

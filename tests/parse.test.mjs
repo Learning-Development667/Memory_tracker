@@ -102,3 +102,10 @@ test('the When slider stops run from no date to next week, in order', () => {
   assert.equal(new Date(s[4].due).getDay(), 6);
   assert.equal(new Date(s[5].due).getDay(), 1);
 });
+
+test('jobs that take days', () => {
+  assert.deepEqual([p('Build mums Christmas present. Probably take me 2 days to get it finished').title, p('Build mums Christmas present. Probably take me 2 days to get it finished').size], ['Build mums Christmas present', 960]);
+  assert.equal(p('Build the shed, a three day job').size, 1440);
+  assert.equal(p('Clear the garage, takes a week').size, 2400);
+  assert.equal(p('Ring the plumber in 2 days').size, null, 'in 2 days is a date, not a length');
+});

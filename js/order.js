@@ -9,11 +9,14 @@ export const SIZES = [
   { min: 60, long: 'An hour', short: '1 hour' },
   { min: 120, long: 'A couple of hours', short: '2 hours' },
   { min: 240, long: 'Half a day', short: 'Half a day' },
-  { min: 480, long: 'A big job', short: 'Big job' },
+  { min: 480, long: 'A day', short: 'A day' },
+  { min: 960, long: 'Two days', short: '2 days' },
+  { min: 1440, long: 'Three days', short: '3 days' },
+  { min: 2400, long: 'A week', short: 'A week' },
 ];
 
 // How long before its date a job starts to climb, in minutes, by size.
-const LEAD_MIN = { 5: 60, 15: 120, 30: 180, 60: 360, 120: 720, 240: 2880, 480: 7200 };
+const LEAD_MIN = { 5: 60, 15: 120, 30: 180, 60: 360, 120: 720, 240: 2880, 480: 7200, 960: 14400, 1440: 20160, 2400: 30240 };
 
 export const BANDS = ['Now', 'Next up', 'When you get a round tuit'];
 export const STALE_DAYS = 14;
@@ -35,17 +38,36 @@ export function effectiveSize(t) { return openSteps(t).length ? Math.min(t.size,
 
 export function leadMs(t) { return (LEAD_MIN[sizeInfo(t.size).min] || 120) * MIN; }
 
+// The days someone plans to work on a job: start-of-day times, chosen on the calendar.
+export function plannedToday(t, now) {
+  const today = startOfDay(now);
+  return (t.workDays || []).some((d) => startOfDay(d) === today);
+}
+export function nextWorkDay(t, now) {
+  const today = startOfDay(now);
+  const ahead = (t.workDays || []).map(startOfDay).filter((d) => d >= today).sort((a, b) => a - b);
+  return ahead.length ? ahead[0] : null;
+}
+
 export function band(t, now) {
+  if (t.due && t.due <= now + HOUR) return 0;
+  if (plannedToday(t, now)) return 1;
   if (!t.due) return 2;
-  if (t.due <= now + HOUR) return 0;
   if (t.due <= endOfDay(now) || now >= t.due - leadMs(t)) return 1;
   return 2;
+}
+// Where a job sits within Now and Next up: by its date; a job planned for today counts as due tonight.
+function soonKey(t, now) {
+  return Math.min(t.due || Infinity, plannedToday(t, now) ? endOfDay(now) : Infinity);
 }
 
 export function compare(a, b, now) {
   const ba = band(a, now), bb = band(b, now);
   if (ba !== bb) return ba - bb;
-  if (ba < 2) return (a.due - b.due) || (effectiveSize(a) - effectiveSize(b)) || (a.createdAt - b.createdAt);
+  if (ba < 2) {
+    const ka = soonKey(a, now), kb = soonKey(b, now);
+    return (ka === kb ? 0 : ka - kb) || (effectiveSize(a) - effectiveSize(b)) || (a.createdAt - b.createdAt);
+  }
   const sa = effectiveSize(a), sb = effectiveSize(b);
   if (sa !== sb) return sa - sb;
   const da = a.due || Infinity, db = b.due || Infinity;

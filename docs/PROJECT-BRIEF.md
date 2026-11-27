@@ -31,13 +31,16 @@ Two people in one home, each on their own iPhone: one iPhone Duo (the foldable) 
 | 24 Nov 2026 | TestFlight is available (Daybook uses it), so stage 5 will reuse Daybook's workflow with a new bundle id. |
 | 24 Nov 2026 | Closed-app reminders are web push sent by the bridge every minute. The bridge makes and keeps its own push key, so there is no key to set up by hand. Background notifications cannot be silenced from the banner on iPhone: Silence is on the buzzer screen. |
 | 24 Nov 2026 | Work goes straight to `main`, which GitHub Pages publishes. |
+| 27 Nov 2026 | Lengths go past a day: A day, Two days, Three days, A week (a working day is 8 hours). Typing "take me 2 days" sets it. |
+| 27 Nov 2026 | Jobs of half a day or more get a calendar of days to work on them. On a planned day the job moves up to Next up and says "Planned for today". |
+| 27 Nov 2026 | Either person can edit or add to either list. Edits never notify anyone. |
 
 ## How the order works
 Every job has a size (5 minutes up to a big job) and may have a date.
 - **Now**: overdue, or due within the hour. Soonest first.
 - **Next up**: due today, or its start-by time has arrived. A 5 minute job starts climbing an hour before it is due; half a day's work climbs two days before; a big job five days before. Soonest first.
 - **When you get a round tuit**: everything else, quickest first.
-A big job with steps counts as a short job while it has a next step, so it does not sit at the bottom for ever.
+A big job with steps counts as a short job while it has a next step, so it does not sit at the bottom for ever. A job planned for today goes into Next up, as if due tonight.
 
 ## Stages
 | Stage | What | State |

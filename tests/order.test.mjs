@@ -102,3 +102,20 @@ test('a nudge waits through quiet hours', () => {
   assert.equal(dueAlerts([nudge], night, SET).notify.length, 0);
   assert.equal(dueAlerts([nudge], night, { quietOn: false, quietFrom: '22:00', quietTo: '07:00' }).notify.length, 1);
 });
+
+test('a planned day lifts a job into Next up, quickest of the rest unchanged', () => {
+  const today = new Date(NOW); today.setHours(0, 0, 0, 0);
+  const cupboard = job('Build the cupboard', 960, null, { workDays: [today.getTime()] });
+  const rows = arrange([job('Tidy the snug', 15), cupboard, job('Paint the hall', 240, NOW + 4 * DAY)], NOW);
+  assert.equal(rows[0].task.title, 'Build the cupboard');
+  assert.equal(rows[0].band, 1);
+  const tomorrowOnly = job('Fit the shelves', 480, null, { workDays: [today.getTime() + DAY] });
+  assert.equal(band(tomorrowOnly, NOW), 2, 'a day planned for tomorrow does not lift it today');
+  assert.equal(band(tomorrowOnly, NOW + DAY), 1);
+});
+
+test('a planned job with no date sorts cleanly beside dated ones', () => {
+  const today = new Date(NOW); today.setHours(0, 0, 0, 0);
+  const order = titles([job('Due this afternoon', 30, NOW + 4 * HOUR), job('Planned', 960, null, { workDays: [today.getTime()] }), job('Due tonight', 5, NOW + 11 * HOUR)]);
+  assert.deepEqual(order, ['Due this afternoon', 'Due tonight', 'Planned'], 'planned for today counts as due by tonight');
+});

@@ -78,6 +78,13 @@ export function parseSentence(text, ctx) {
     out.size = m[1].toLowerCase() === 'half an' ? 30 : num(m[1].toLowerCase()) * unit;
   });
   if (out.size === null) take(/\b(?:an? )?(\d+)[ -]?(?:min|mins|minute) job\b/i, (m) => { out.size = parseInt(m[1], 10); });
+  // Days and weeks: "probably take me 2 days", "a two day job", "a week's work". A working day is 8 hours.
+  const DAYS_OF = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, 'a couple of': 2, 'a few': 3 };
+  const dayCount = (w) => (DAYS_OF[w.toLowerCase()] !== undefined ? DAYS_OF[w.toLowerCase()] : parseInt(w, 10));
+  if (out.size === null) take(/[,.]?\s*\b(?:it(?:'ll| will)? |(?:i|we)(?:'ll| will) )?(?:probably |should |might |about |around )*takes? (?:me |us |him |her )?(?:about |around )?(\d+|an?|one|two|three|four|five|a couple of|a few) (days?|weeks?)\b(?: to (?:get it )?(?:finish|finished|do|done|complete)\w*)?/i, (m) => {
+    out.size = dayCount(m[1]) * (/^w/i.test(m[2]) ? 2400 : 480);
+  });
+  if (out.size === null) take(/\b(?:an? )?(\d+|one|two|three|four|five)[ -]days?(?: long)? job\b/i, (m) => { out.size = dayCount(m[1]) * 480; });
 
   let day = null;        // start of the day named
   let time = null;       // { h, m, fixed } from a clock time

@@ -92,7 +92,7 @@ export function newTask(fields) {
   return Object.assign({
     id: uid(), title: '', list: me(), addedBy: me(), createdAt: now, updatedAt: now,
     due: null, hasTime: false, size: 15, sizeFrom: 'guess', label: '', remind: 'quiet',
-    repeat: '', steps: [], doneAt: null, doneBy: null, silencedUntil: 0, alertedAt: 0,
+    repeat: '', steps: [], workDays: [], doneAt: null, doneBy: null, silencedUntil: 0, alertedAt: 0,
   }, fields);
 }
 
